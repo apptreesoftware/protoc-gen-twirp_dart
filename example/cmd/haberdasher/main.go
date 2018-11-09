@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/matthewtsmith/protoc-gen-twirp_typescript/example"
+	"github.com/matthewtsmith/protoc-gen-twirp-dart/example"
 	"log"
 	"math/rand"
 	"net/http"

@@ -1,4 +1,4 @@
-BINARY := protoc-gen-twirp_typescript
+BINARY := protoc-gen-twirp-dart
 
 TIMESTAMP := $(shell date -u "+%Y-%m-%dT%H:%M:%SZ")
 COMMIT := $(shell git rev-parse --short HEAD)
@@ -9,7 +9,7 @@ LDFLAGS := -ldflags "-X main.Timestamp=${TIMESTAMP} -X main.Commit=${COMMIT} -X 
 all: clean test install
 
 install:
-	go install ${LDFLAGS} go.larrymyers.com/protoc-gen-twirp_typescript
+	go install ${LDFLAGS} github.com/matthewtsmith/protoc-gen-twirp-dart
 
 test:
 	go test -v ./...
@@ -19,10 +19,10 @@ lint:
 
 run: install
 	mkdir -p example/ts_client && \
-	protoc --proto_path=${GOPATH}/src:. --twirp_out=. --go_out=. --twirp_typescript_out=package_name=haberdasher:./example/ts_client ./example/service.proto
+	protoc --proto_path=${GOPATH}/src:. --twirp_out=. --go_out=. --twirp_dart_out=package_name=haberdasher:./example/ts_client ./example/service.proto
 
 build_linux:
-	GOOS=linux GOARCH=amd64 go build -o ${BINARY} ${LDFLAGS} go.larrymyers.com/protoc-gen-twirp_typescript
+	GOOS=linux GOARCH=amd64 go build -o ${BINARY} ${LDFLAGS} github.com/matthewtsmith/protoc-gen-twirp-dart
 
 clean:
 	-rm -f ${GOPATH}/bin/${BINARY}

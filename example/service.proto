@@ -20,6 +20,10 @@ message Hat {
     google.protobuf.Timestamp created_on = 4;
 
     Color rgbColor = 5;
+
+    repeated Size availableSizes = 6;
+
+    repeated int32 roles = 7;
 }
 
 message Color {

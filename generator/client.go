@@ -29,7 +29,15 @@ class {{.Name}} {
 	
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
 		return new {{.Name}}(){{range .Fields -}}
-		{{if and (.IsMessage) (eq .Type "DateTime")}}..{{.Name}} = {{.Type}}.tryParse(json['{{.JSONName}}'])
+		{{if and .IsRepeated .IsMessage}}
+		..{{.Name}} = json['{{.JSONName}}'] != null
+          ? (json['{{.JSONName}}'] as List)
+              .map((d) => new {{.InternalType}}.fromJson(d))
+              .toList()
+          : <{{.InternalType}}>[]
+		{{else if .IsRepeated }}
+		..{{.Name}} = json['{{.JSONName}}'] != null ? (json['{{.JSONName}}'] as List).cast<{{.InternalType}}>() : <{{.InternalType}}>[];
+		{{else if and (.IsMessage) (eq .Type "DateTime")}}..{{.Name}} = {{.Type}}.tryParse(json['{{.JSONName}}'])
 		{{else if .IsMessage}}..{{.Name}} = new {{.Type}}.fromJson(json)
 		{{else}}
 		..{{.Name}} = json['{{.JSONName}}'] as {{.Type}} 
@@ -40,7 +48,11 @@ class {{.Name}} {
 	Map<String,dynamic>toJson() {
 		var map = new Map<String, dynamic>();
     	{{- range .Fields -}}
-		{{if and (.IsMessage) (eq .Type "DateTime")}}
+		{{if and .IsRepeated .IsMessage}}
+		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l.toJson())?.toList();
+		{{else if .IsRepeated }}
+		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l)?.toList();
+		{{- else if and (.IsMessage) (eq .Type "DateTime")}}
 		map['{{.JSONName}}'] = {{.Name}}.toIso8601String();
 		{{- else if .IsMessage}}
 		map['{{.JSONName}}'] = {{.Name}}.toJson();
@@ -64,7 +76,7 @@ class {{.Name}} {
 abstract class {{.Name}} {
 	{{- range .Methods}}
 	Future<{{.OutputType}}>{{.Name}}({{.InputType}} {{.InputArg}});
-    {{end}}
+    {{- end}}
 }
 
 class Default{{.Name}} implements {{.Name}} {
@@ -119,12 +131,13 @@ type Model struct {
 }
 
 type ModelField struct {
-	Name       string
-	Type       string
-	JSONName   string
-	JSONType   string
-	IsMessage  bool
-	IsRepeated bool
+	Name         string
+	Type         string
+	InternalType string
+	JSONName     string
+	JSONType     string
+	IsMessage    bool
+	IsRepeated   bool
 }
 
 type Service struct {
@@ -171,7 +184,8 @@ func (ctx *APIContext) ApplyMarshalFlags() {
 
 			baseType := f.Type
 			if f.IsRepeated {
-				baseType = strings.Trim(baseType, "[]")
+				baseType = strings.Replace(baseType, "List<", "", -1)
+				baseType = strings.Replace(baseType, ">", "", -1)
 			}
 
 			if m.CanMarshal {
@@ -181,6 +195,7 @@ func (ctx *APIContext) ApplyMarshalFlags() {
 			if m.CanUnmarshal {
 				m, ok := ctx.modelLookup[baseType]
 				if !ok {
+					print(baseType)
 					log.Fatalf("could not find model of type %s for field %s", baseType, f.Name)
 				}
 				ctx.enableUnmarshal(m)
@@ -199,6 +214,7 @@ func (ctx *APIContext) enableMarshal(m *Model) {
 		}
 		mm, ok := ctx.modelLookup[f.Type]
 		if !ok {
+			print(f.Name)
 			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
 		}
 		ctx.enableMarshal(mm)
@@ -215,6 +231,7 @@ func (ctx *APIContext) enableUnmarshal(m *Model) {
 		}
 		mm, ok := ctx.modelLookup[f.Type]
 		if !ok {
+			print(f.Name)
 			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
 		}
 		ctx.enableUnmarshal(mm)
@@ -312,15 +329,16 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorRe
 }
 
 func newField(f *descriptor.FieldDescriptorProto) ModelField {
-	tsType, jsonType := protoToTSType(f)
+	tsType, internalType, jsonType := protoToTSType(f)
 	jsonName := f.GetName()
 	name := camelCase(jsonName)
 
 	field := ModelField{
-		Name:     name,
-		Type:     tsType,
-		JSONName: jsonName,
-		JSONType: jsonType,
+		Name:         name,
+		Type:         tsType,
+		InternalType: internalType,
+		JSONName:     jsonName,
+		JSONType:     jsonType,
 	}
 
 	field.IsMessage = f.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE
@@ -331,9 +349,10 @@ func newField(f *descriptor.FieldDescriptorProto) ModelField {
 
 // generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
 // will work when converting between TS interfaces and protobuf JSON.
-func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string) {
+func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string, string) {
 	dartType := "String"
 	jsonType := "string"
+	internalType := "String"
 
 	switch f.GetType() {
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
@@ -368,13 +387,14 @@ func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string) {
 			jsonType = removePkg(name) + "JSON"
 		}
 	}
+	internalType = dartType
 
 	if isRepeated(f) {
 		dartType = "List<" + dartType + ">"
 		jsonType = jsonType + "[]"
 	}
 
-	return dartType, jsonType
+	return dartType, internalType, jsonType
 }
 
 func isRepeated(field *descriptor.FieldDescriptorProto) bool {

@@ -25,9 +25,18 @@ func (h *randomHaberdasher) MakeHat(ctx context.Context, size *example.Size) (*e
 	}
 
 	return &example.Hat{
-		Size:      size.Inches,
-		Color:     []string{"white", "black", "brown", "red", "blue"}[rand.Intn(4)],
-		Name:      []string{"bowler", "baseball cap", "top hat", "derby"}[rand.Intn(3)],
+		Size:  size.Inches,
+		Color: []string{"white", "black", "brown", "red", "blue"}[rand.Intn(4)],
+		Name:  []string{"bowler", "baseball cap", "top hat", "derby"}[rand.Intn(3)],
+		AvailableSizes: []*example.Size{
+			{Inches: 10},
+			{Inches: 20},
+		},
+		Roles: []int32{
+			1,
+			2,
+			3,
+		},
 		CreatedOn: ts,
 	}, nil
 }

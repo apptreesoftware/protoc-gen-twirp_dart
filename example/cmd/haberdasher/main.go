@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/matthewtsmith/protoc-gen-twirp_dart/example"
+	"github.com/apptreesoftware/protoc-gen-twirp_dart/example"
 	"log"
 	"math/rand"
 	"net/http"

@@ -18,6 +18,14 @@ message Hat {
     string name = 3;
 
     google.protobuf.Timestamp created_on = 4;
+
+    Color rgbColor = 5;
+}
+
+message Color {
+    int32 red = 1;
+    int32 green = 2;
+    int32 blue = 3;
 }
 
 // Size is passed when requesting a new hat to be made. It's always

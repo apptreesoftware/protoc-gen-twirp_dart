@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/matthewtsmith/protoc-gen-twirp_typescript/generator"
 	"io"
 	"io/ioutil"
 	"os"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
-	"go.larrymyers.com/protoc-gen-twirp_typescript/generator"
 )
 
 func main() {
@@ -53,20 +53,6 @@ func generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResponse {
 	}
 
 	resp.File = append(resp.File, generator.RuntimeLibrary())
-
-	params := getParameters(in)
-
-	if pkgName, ok := params["package_name"]; ok {
-		idx, err := generator.CreatePackageIndex(resp.File)
-		if err != nil {
-			resp.Error = proto.String(err.Error())
-			return resp
-		}
-
-		resp.File = append(resp.File, idx)
-		resp.File = append(resp.File, generator.CreateTSConfig())
-		resp.File = append(resp.File, generator.CreatePackageJSON(pkgName))
-	}
 
 	return resp
 }

@@ -13,82 +13,101 @@ import (
 )
 
 const apiTemplate = `
-import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart';
+import 'package:requester/requester.dart';
+import 'twirp.dart';
 
 {{range .Models}}
 {{- if not .Primitive}}
-export interface {{.Name}} {
+class {{.Name}} {
+	{{.Name}}();
     {{range .Fields -}}
-    {{.Name}}: {{.Type}};
+    {{.Type}} {{.Name}};
     {{end}}
+	
+	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
+		return new {{.Name}}(){{range .Fields -}}
+		{{if and (.IsMessage) (eq .Type "DateTime")}}..{{.Name}} = {{.Type}}.tryParse(json['{{.JSONName}}'])
+		{{else if .IsMessage}}..{{.Name}} = new {{.Type}}.fromJson(json)
+		{{else}}
+		..{{.Name}} = json['{{.JSONName}}'] as {{.Type}} 
+		{{- end}}
+		{{- end}};
+	}
+
+	Map<String,dynamic>toJson() {
+		var map = new Map<String, dynamic>();
+    	{{- range .Fields -}}
+		{{if and (.IsMessage) (eq .Type "DateTime")}}
+		map['{{.JSONName}}'] = {{.Name}}.toIso8601String();
+		{{- else if .IsMessage}}
+		map['{{.JSONName}}'] = {{.Name}}.toJson();
+		{{- else}}
+    	map['{{.JSONName}}'] = {{.Name}};
+    	{{- end}}
+		{{- end}}
+		return map;
+	}
+
+  @override
+  String toString() {
+    return json.encode(toJson());
+  }
 }
 
-interface {{.Name}}JSON {
-    {{range .Fields -}}
-    {{.JSONName}}: {{.JSONType}};
-    {{end}}
-}
-
-{{if .CanMarshal}}
-const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
-	return {
-        {{range .Fields -}}
-        {{.JSONName}}: {{stringify .}},
-        {{end}}
-    };
-};
-{{end -}}
-
-{{if .CanUnmarshal}}
-const JSONTo{{.Name}} = (m: {{.Name}} | {{.Name}}JSON): {{.Name}} => {
-    {{$Model := .Name}}
-    return {
-        {{range .Fields -}}
-        {{.Name}}: {{parse . $Model}},
-        {{end}}
-    };
-};
-{{end -}}
 {{end -}}
 {{end}}
 
 {{range .Services}}
-export interface {{.Name}} {
+abstract class {{.Name}} {
 	{{- range .Methods}}
-    {{.Name}}: ({{.InputArg}}: {{.InputType}}) => Promise<{{.OutputType}}>;
+	Future<{{.OutputType}}>{{.Name}}({{.InputType}} {{.InputArg}});
     {{end}}
 }
 
-export class Default{{.Name}} implements {{.Name}} {
-    private hostname: string;
-    private fetch: Fetch;
-	private writeCamelCase: boolean;
-    private pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
+class Default{{.Name}} implements {{.Name}} {
+	final String hostname;
+    Requester _requester;
+	final _pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
 
-    constructor(hostname: string, fetch: Fetch, writeCamelCase = false) {
-        this.hostname = hostname;
-        this.fetch = fetch;
-		this.writeCamelCase = writeCamelCase;
-    }
-
-    {{- range .Methods}}
-    {{.Name}}({{.InputArg}}: {{.InputType}}): Promise<{{.OutputType}}> {
-        const url = this.hostname + this.pathPrefix + "{{.Path}}";
-		let body: {{.InputType}} | {{.InputType}}JSON = {{.InputArg}};
-		if(!this.writeCamelCase){
-			body = {{.InputType}}ToJSON({{.InputArg}});
+    Default{{.Name}}(this.hostname, {Requester requester}) {
+		if (requester == null) {
+      		_requester = new Requester(new Client());
+    	} else {
+			_requester = requester;
 		}
-        return this.fetch(createTwirpRequest(url, body)).then((resp) => {
- 			if (!resp.ok) {
-                return throwTwirpError(resp);
-            }
+	}
 
-			return resp.json().then(JSONTo{{.OutputType}});
-        });
-    }
+    {{range .Methods}}
+	Future<{{.OutputType}}>{{.Name}}({{.InputType}} {{.InputArg}}) async {
+		var url = "${hostname}${_pathPrefix}{{.Path}}";
+		var uri = Uri.parse(url);
+    	var request = new Request('POST', uri);
+		request.headers['Content-Type'] = 'application/json';
+    	request.body = json.encode({{.InputArg}}.toJson());
+    	var response = await _requester.send(request);
+		if (response.statusCode != 200) {
+     		throw twirpException(response);
+    	}
+    	var value = json.decode(response.body);
+    	return {{.OutputType}}.fromJson(value);
+	}
     {{end}}
+
+  TwirpException twirpException(Response response) {
+    try {
+      var value = json.decode(response.body);
+      return new TwirpJsonException.fromJson(value);
+    } catch (e) {
+      throw new TwirpException(response.body);
+    }
+  }
 }
+
 {{end}}
+
 `
 
 type Model struct {
@@ -146,7 +165,7 @@ func (ctx *APIContext) ApplyMarshalFlags() {
 	for _, m := range ctx.Models {
 		for _, f := range m.Fields {
 			// skip primitive types and WKT Timestamps
-			if !f.IsMessage || f.Type == "Date" {
+			if !f.IsMessage || f.Type == "DateTime" {
 				continue
 			}
 
@@ -175,7 +194,7 @@ func (ctx *APIContext) enableMarshal(m *Model) {
 
 	for _, f := range m.Fields {
 		// skip primitive types and WKT Timestamps
-		if !f.IsMessage || f.Type == "Date" {
+		if !f.IsMessage || f.Type == "DateTime" {
 			continue
 		}
 		mm, ok := ctx.modelLookup[f.Type]
@@ -191,7 +210,7 @@ func (ctx *APIContext) enableUnmarshal(m *Model) {
 
 	for _, f := range m.Fields {
 		// skip primitive types and WKT Timestamps
-		if !f.IsMessage || f.Type == "Date" {
+		if !f.IsMessage || f.Type == "DateTime" {
 			continue
 		}
 		mm, ok := ctx.modelLookup[f.Type]
@@ -313,22 +332,25 @@ func newField(f *descriptor.FieldDescriptorProto) ModelField {
 // generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
 // will work when converting between TS interfaces and protobuf JSON.
 func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string) {
-	tsType := "string"
+	dartType := "String"
 	jsonType := "string"
 
 	switch f.GetType() {
-	case descriptor.FieldDescriptorProto_TYPE_DOUBLE,
-		descriptor.FieldDescriptorProto_TYPE_FIXED32,
+	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
+		dartType = "double"
+		jsonType = "number"
+		break
+	case descriptor.FieldDescriptorProto_TYPE_FIXED32,
 		descriptor.FieldDescriptorProto_TYPE_FIXED64,
 		descriptor.FieldDescriptorProto_TYPE_INT32,
 		descriptor.FieldDescriptorProto_TYPE_INT64:
-		tsType = "number"
+		dartType = "int"
 		jsonType = "number"
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		tsType = "string"
+		dartType = "String"
 		jsonType = "string"
 	case descriptor.FieldDescriptorProto_TYPE_BOOL:
-		tsType = "boolean"
+		dartType = "bool"
 		jsonType = "boolean"
 	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
 		name := f.GetTypeName()
@@ -339,20 +361,20 @@ func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string) {
 		// JSON.stringify already handles serializing Date to its RFC 3339 format.
 		//
 		if name == ".google.protobuf.Timestamp" {
-			tsType = "Date"
+			dartType = "DateTime"
 			jsonType = "string"
 		} else {
-			tsType = removePkg(name)
+			dartType = removePkg(name)
 			jsonType = removePkg(name) + "JSON"
 		}
 	}
 
 	if isRepeated(f) {
-		tsType = tsType + "[]"
+		dartType = "List<" + dartType + ">"
 		jsonType = jsonType + "[]"
 	}
 
-	return tsType, jsonType
+	return dartType, jsonType
 }
 
 func isRepeated(field *descriptor.FieldDescriptorProto) bool {
@@ -369,7 +391,7 @@ func camelCase(s string) string {
 
 	for i, p := range parts {
 		if i == 0 {
-			parts[i] = strings.ToLower(p)
+			parts[i] = p
 		} else {
 			parts[i] = strings.ToUpper(p[0:1]) + strings.ToLower(p[1:])
 		}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/matthewtsmith/protoc-gen-twirp_typescript/example"
 	"log"
 	"math/rand"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/twitchtv/twirp"
-	"go.larrymyers.com/protoc-gen-twirp_typescript/example"
 )
 
 type randomHaberdasher struct{}

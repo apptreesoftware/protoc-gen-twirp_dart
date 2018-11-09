@@ -1,0 +1,7 @@
+name: darttwirp
+version: 1.19.0
+environment:
+  sdk: ">=1.24.3 <3.0.0"
+dependencies:
+  http: ^0.11.0
+  requester: ">=0.0.2 <2.0.0"

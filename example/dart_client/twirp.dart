@@ -1,12 +1,4 @@
-package generator
 
-import (
-	"github.com/golang/protobuf/proto"
-	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
-)
-
-func RuntimeLibrary() *plugin.CodeGeneratorResponse_File {
-	tmpl := `
 class TwirpException {
   final String message;
 
@@ -24,11 +16,4 @@ class TwirpJsonException extends TwirpException {
     return new TwirpJsonException(
         json['code'] as String, json['msg'] as String, json['meta']);
   }
-}
-`
-	cf := &plugin.CodeGeneratorResponse_File{}
-	cf.Name = proto.String("twirp.dart")
-	cf.Content = proto.String(tmpl)
-
-	return cf
 }

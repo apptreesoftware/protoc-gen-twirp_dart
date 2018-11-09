@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/matthewtsmith/protoc-gen-twirp-dart/generator"
+	"github.com/matthewtsmith/protoc-gen-twirp_dart/generator"
 	"io"
 	"io/ioutil"
 	"os"

@@ -32,6 +32,9 @@ message Color {
     int32 blue = 3;
 }
 
+message Receipt {
+    double total = 1;
+}
 // Size is passed when requesting a new hat to be made. It's always
 // measured in inches.
 message Size {
@@ -42,4 +45,6 @@ message Size {
 service Haberdasher {
     // MakeHat produces a hat of mysterious, randomly-selected color!
     rpc MakeHat(Size) returns (Hat);
+
+    rpc BuyHat(Hat) returns (Hat);
 }

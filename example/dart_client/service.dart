@@ -77,6 +77,26 @@ class Color {
   }
 }
 
+class Receipt {
+  Receipt();
+  double total;
+
+  factory Receipt.fromJson(Map<String, dynamic> json) {
+    return new Receipt()..total = json['total'] as double;
+  }
+
+  Map<String, dynamic> toJson() {
+    var map = new Map<String, dynamic>();
+    map['total'] = total;
+    return map;
+  }
+
+  @override
+  String toString() {
+    return json.encode(toJson());
+  }
+}
+
 class Size {
   Size();
   int inches;
@@ -99,6 +119,7 @@ class Size {
 
 abstract class Haberdasher {
   Future<Hat> makeHat(Size size);
+  Future<Hat> buyHat(Hat hat);
 }
 
 class DefaultHaberdasher implements Haberdasher {
@@ -120,6 +141,20 @@ class DefaultHaberdasher implements Haberdasher {
     var request = new Request('POST', uri);
     request.headers['Content-Type'] = 'application/json';
     request.body = json.encode(size.toJson());
+    var response = await _requester.send(request);
+    if (response.statusCode != 200) {
+      throw twirpException(response);
+    }
+    var value = json.decode(response.body);
+    return Hat.fromJson(value);
+  }
+
+  Future<Hat> buyHat(Hat hat) async {
+    var url = "${hostname}${_pathPrefix}BuyHat";
+    var uri = Uri.parse(url);
+    var request = new Request('POST', uri);
+    request.headers['Content-Type'] = 'application/json';
+    request.body = json.encode(hat.toJson());
     var response = await _requester.send(request);
     if (response.statusCode != 200) {
       throw twirpException(response);

@@ -18,8 +18,8 @@ lint:
 	go list ./... | grep -v /vendor/ | xargs -L1 golint -set_exit_status
 
 run: install
-	mkdir -p example/ts_client && \
-	protoc --proto_path=${GOPATH}/src:. --twirp_out=. --go_out=. --twirp_dart_out=package_name=haberdasher:./example/ts_client ./example/service.proto
+	mkdir -p example/dart_client && \
+	protoc --proto_path=${GOPATH}/src:. --twirp_out=. --go_out=. --twirp_dart_out=package_name=haberdasher:./example/dart_client ./example/service.proto
 
 build_linux:
 	GOOS=linux GOARCH=amd64 go build -o ${BINARY} ${LDFLAGS} github.com/apptreesoftware/protoc-gen-twirp_dart

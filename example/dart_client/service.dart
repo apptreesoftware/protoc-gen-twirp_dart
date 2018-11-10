@@ -5,7 +5,16 @@ import 'package:requester/requester.dart';
 import 'twirp.dart';
 
 class Hat {
-  Hat();
+  Hat(
+    this.size,
+    this.color,
+    this.name,
+    this.createdOn,
+    this.rgbColor,
+    this.availableSizes,
+    this.roles,
+  );
+
   int size;
   String color;
   String name;
@@ -15,20 +24,19 @@ class Hat {
   List<int> roles;
 
   factory Hat.fromJson(Map<String, dynamic> json) {
-    return new Hat()
-      ..size = json['size'] as int
-      ..color = json['color'] as String
-      ..name = json['name'] as String
-      ..createdOn = DateTime.tryParse(json['created_on'])
-      ..rgbColor = new Color.fromJson(json)
-      ..availableSizes = json['availableSizes'] != null
+    return new Hat(
+      json['size'] as int,
+      json['color'] as String,
+      json['name'] as String,
+      DateTime.tryParse(json['created_on']),
+      new Color.fromJson(json),
+      json['availableSizes'] != null
           ? (json['availableSizes'] as List)
               .map((d) => new Size.fromJson(d))
               .toList()
-          : <Size>[]
-      ..roles =
-          json['roles'] != null ? (json['roles'] as List).cast<int>() : <int>[];
-    ;
+          : <Size>[],
+      json['roles'] != null ? (json['roles'] as List).cast<int>() : <int>[],
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -39,7 +47,6 @@ class Hat {
     map['created_on'] = createdOn.toIso8601String();
     map['rgbColor'] = rgbColor.toJson();
     map['availableSizes'] = availableSizes?.map((l) => l.toJson())?.toList();
-
     map['roles'] = roles?.map((l) => l)?.toList();
     return map;
   }
@@ -51,16 +58,22 @@ class Hat {
 }
 
 class Color {
-  Color();
+  Color(
+    this.red,
+    this.green,
+    this.blue,
+  );
+
   int red;
   int green;
   int blue;
 
   factory Color.fromJson(Map<String, dynamic> json) {
-    return new Color()
-      ..red = json['red'] as int
-      ..green = json['green'] as int
-      ..blue = json['blue'] as int;
+    return new Color(
+      json['red'] as int,
+      json['green'] as int,
+      json['blue'] as int,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -78,11 +91,16 @@ class Color {
 }
 
 class Receipt {
-  Receipt();
+  Receipt(
+    this.total,
+  );
+
   double total;
 
   factory Receipt.fromJson(Map<String, dynamic> json) {
-    return new Receipt()..total = json['total'] as double;
+    return new Receipt(
+      json['total'] as double,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -98,11 +116,16 @@ class Receipt {
 }
 
 class Size {
-  Size();
+  Size(
+    this.inches,
+  );
+
   int inches;
 
   factory Size.fromJson(Map<String, dynamic> json) {
-    return new Size()..inches = json['inches'] as int;
+    return new Size(
+      json['inches'] as int,
+    );
   }
 
   Map<String, dynamic> toJson() {

@@ -22,35 +22,43 @@ import 'twirp.dart';
 {{range .Models}}
 {{- if not .Primitive}}
 class {{.Name}} {
-	{{.Name}}();
+
+	{{.Name}}(
+	{{range .Fields -}}
+		this.{{.Name}},
+	{{- end}});
+
     {{range .Fields -}}
     {{.Type}} {{.Name}};
     {{end}}
 	
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
-		return new {{.Name}}(){{range .Fields -}}
+		return new {{.Name}}({{range .Fields -}}
 		{{if and .IsRepeated .IsMessage}}
-		..{{.Name}} = json['{{.JSONName}}'] != null
+		json['{{.JSONName}}'] != null
           ? (json['{{.JSONName}}'] as List)
               .map((d) => new {{.InternalType}}.fromJson(d))
               .toList()
-          : <{{.InternalType}}>[]
+          : <{{.InternalType}}>[],
 		{{else if .IsRepeated }}
-		..{{.Name}} = json['{{.JSONName}}'] != null ? (json['{{.JSONName}}'] as List).cast<{{.InternalType}}>() : <{{.InternalType}}>[];
-		{{else if and (.IsMessage) (eq .Type "DateTime")}}..{{.Name}} = {{.Type}}.tryParse(json['{{.JSONName}}'])
-		{{else if .IsMessage}}..{{.Name}} = new {{.Type}}.fromJson(json)
+		json['{{.JSONName}}'] != null ? (json['{{.JSONName}}'] as List).cast<{{.InternalType}}>() : <{{.InternalType}}>[],
+		{{else if and (.IsMessage) (eq .Type "DateTime")}}
+		{{.Type}}.tryParse(json['{{.JSONName}}']),
+		{{else if .IsMessage}}
+		new {{.Type}}.fromJson(json),
 		{{else}}
-		..{{.Name}} = json['{{.JSONName}}'] as {{.Type}} 
+		json['{{.JSONName}}'] as {{.Type}}, 
 		{{- end}}
-		{{- end}};
+		{{- end}}
+		);	
 	}
 
 	Map<String,dynamic>toJson() {
 		var map = new Map<String, dynamic>();
     	{{- range .Fields -}}
-		{{if and .IsRepeated .IsMessage}}
+		{{- if and .IsRepeated .IsMessage}}
 		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l.toJson())?.toList();
-		{{else if .IsRepeated }}
+		{{- else if .IsRepeated }}
 		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l)?.toList();
 		{{- else if and (.IsMessage) (eq .Type "DateTime")}}
 		map['{{.JSONName}}'] = {{.Name}}.toIso8601String();

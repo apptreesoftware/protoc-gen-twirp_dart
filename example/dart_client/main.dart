@@ -6,7 +6,7 @@ import 'twirp.dart';
 Future main(List<String> args) async {
   var service = new DefaultHaberdasher('http://localhost:8080');
   try {
-    var hat = await service.makeHat(new Size()..inches = 10);
+    var hat = await service.makeHat(new Size(10));
     print(hat);
 
     var boughtHat = await service.buyHat(hat);

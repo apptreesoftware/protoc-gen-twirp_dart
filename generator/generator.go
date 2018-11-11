@@ -14,7 +14,7 @@ func tsModuleFilename(f *descriptor.FileDescriptorProto) string {
 		name = base[:len(base)-len(path.Ext(base))]
 	}
 
-	name += ".dart"
+	name += ".g.dart"
 
 	return name
 }

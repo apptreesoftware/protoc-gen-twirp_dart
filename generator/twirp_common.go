@@ -27,7 +27,7 @@ class TwirpJsonException extends TwirpException {
 }
 `
 	cf := &plugin.CodeGeneratorResponse_File{}
-	cf.Name = proto.String("twirp.dart")
+	cf.Name = proto.String("twirp.g.dart")
 	cf.Content = proto.String(tmpl)
 
 	return cf

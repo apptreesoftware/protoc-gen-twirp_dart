@@ -17,7 +17,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart';
 import 'package:requester/requester.dart';
-import 'twirp.dart';
+import 'twirp.g.dart';
 
 {{range .Models}}
 {{- if not .Primitive}}

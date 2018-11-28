@@ -1,7 +1,8 @@
 syntax = "proto3";
 
-package twitch.twirp.example;
-option go_package = "example";
+package config.model;
+option go_package = "github.com/apptreesoftware/protoc-gen-twirp_dart/example/go/config/model";
+
 
 import "google/protobuf/timestamp.proto";
 
@@ -24,6 +25,9 @@ message Hat {
     repeated Size availableSizes = 6;
 
     repeated int32 roles = 7;
+
+    map<string, int64> dictionary = 8;
+    map<string, Size> dictionaryWithMessage = 9;
 }
 
 message Color {
@@ -39,12 +43,4 @@ message Receipt {
 // measured in inches.
 message Size {
     int32 inches = 1;
-}
-
-// A Haberdasher makes hats for clients.
-service Haberdasher {
-    // MakeHat produces a hat of mysterious, randomly-selected color!
-    rpc MakeHat(Size) returns (Hat);
-
-    rpc BuyHat(Hat) returns (Hat);
 }

@@ -3,23 +3,23 @@ package generator
 import (
 	"bytes"
 	"fmt"
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
+	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
+	"github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 	"log"
+	"os"
+	"path"
 	"strings"
 	"text/template"
-
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
 const apiTemplate = `
-import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart';
-import 'package:requester/requester.dart';
-import 'twirp.g.dart';
+{{- range .Imports}}
+import '{{.Path}}';
+{{- end}}
 
-{{range .Models}}
+{{- range .Models}}
 {{- if not .Primitive}}
 class {{.Name}} {
 
@@ -33,8 +33,38 @@ class {{.Name}} {
     {{end}}
 	
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
-		return new {{.Name}}({{range .Fields -}}
-		{{if and .IsRepeated .IsMessage}}
+		{{- range .Fields -}}
+			{{if .IsMap}}
+			var {{.Name}}Map = new {{.Type}}();
+			(json['{{.JSONName}}'] as Map<String, dynamic>)?.forEach((key, val) {
+				{{if .MapValueField.IsMessage}}
+				{{.Name}}Map[key] = new {{.MapValueField.Type}}.fromJson(val as Map<String,dynamic>);
+				{{else}}
+				if (val is String) {
+					{{if eq .MapValueField.Type "double"}}
+						{{.Name}}Map[key] = double.parse(val);
+					{{end}}
+					{{if eq .MapValueField.Type "int"}}
+						{{.Name}}Map[key] = int.parse(val);
+					{{end}}
+				} else if (val is num) {
+					{{if eq .MapValueField.Type "double"}}
+						{{.Name}}Map[key] = val.toDouble();
+					{{end}}
+					{{if eq .MapValueField.Type "int"}}
+						{{.Name}}Map[key] = val.toInt();
+					{{end}}
+				}
+				{{end}}
+			});
+			{{end}}
+		{{end}}
+
+		return new {{.Name}}(
+		{{- range .Fields -}}
+		{{if .IsMap}}
+		{{.Name}}Map,
+		{{else if and .IsRepeated .IsMessage}}
 		json['{{.JSONName}}'] != null
           ? (json['{{.JSONName}}'] as List)
               .map((d) => new {{.InternalType}}.fromJson(d))
@@ -56,7 +86,9 @@ class {{.Name}} {
 	Map<String,dynamic>toJson() {
 		var map = new Map<String, dynamic>();
     	{{- range .Fields -}}
-		{{- if and .IsRepeated .IsMessage}}
+		{{- if .IsMap }}
+		map['{{.JSONName}}'] = json.decode(json.encode({{.Name}}));
+		{{- else if and .IsRepeated .IsMessage}}
 		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l.toJson())?.toList();
 		{{- else if .IsRepeated }}
 		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l)?.toList();
@@ -76,9 +108,8 @@ class {{.Name}} {
     return json.encode(toJson());
   }
 }
-
 {{end -}}
-{{end}}
+{{end -}}
 
 {{range .Services}}
 abstract class {{.Name}} {
@@ -116,12 +147,12 @@ class Default{{.Name}} implements {{.Name}} {
 	}
     {{end}}
 
-  TwirpException twirpException(Response response) {
+	Exception twirpException(Response response) {
     try {
       var value = json.decode(response.body);
-      return new TwirpJsonException.fromJson(value);
+      return new Exception(value['msg']);
     } catch (e) {
-      throw new TwirpException(response.body);
+		return new Exception(response.body);
     }
   }
 }
@@ -139,13 +170,16 @@ type Model struct {
 }
 
 type ModelField struct {
-	Name         string
-	Type         string
-	InternalType string
-	JSONName     string
-	JSONType     string
-	IsMessage    bool
-	IsRepeated   bool
+	Name          string
+	Type          string
+	InternalType  string
+	JSONName      string
+	JSONType      string
+	IsMessage     bool
+	IsRepeated    bool
+	IsMap         bool
+	MapKeyField   *ModelField
+	MapValueField *ModelField
 }
 
 type Service struct {
@@ -172,7 +206,12 @@ func NewAPIContext() APIContext {
 type APIContext struct {
 	Models      []*Model
 	Services    []*Service
+	Imports     []Import
 	modelLookup map[string]*Model
+}
+
+type Import struct {
+	Path string
 }
 
 func (ctx *APIContext) AddModel(m *Model) {
@@ -180,8 +219,46 @@ func (ctx *APIContext) AddModel(m *Model) {
 	ctx.modelLookup[m.Name] = m
 }
 
+func (ctx *APIContext) ApplyImports(d *descriptor.FileDescriptorProto) {
+	var deps []Import
+
+	if len(ctx.Services) > 0 {
+		deps = append(deps, Import{"dart:async"})
+		deps = append(deps, Import{"package:http/http.dart"})
+		deps = append(deps, Import{"package:requester/requester.dart"})
+	}
+	deps = append(deps, Import{"dart:convert"})
+
+	for _, dep := range d.Dependency {
+		if dep == "google/protobuf/timestamp.proto" {
+			continue
+		}
+		importPath := path.Dir(dep)
+		sourceDir := path.Dir(*d.Name)
+		sourceComponents := strings.Split(sourceDir, fmt.Sprintf("%c", os.PathSeparator))
+		distanceFromRoot := len(sourceComponents)
+		for _, pathComponent := range sourceComponents {
+			if strings.HasPrefix(importPath, pathComponent) {
+				importPath = strings.TrimPrefix(importPath, pathComponent)
+				distanceFromRoot--
+			}
+		}
+		fileName := dartFilename(dep)
+		fullPath := fileName
+		fullPath = path.Join(importPath, fullPath)
+		if distanceFromRoot > 0 {
+			for i := 0; i < distanceFromRoot; i++ {
+				fullPath = path.Join("..", fullPath)
+			}
+		}
+		deps = append(deps, Import{fullPath})
+	}
+	ctx.Imports = deps
+}
+
 // ApplyMarshalFlags will inspect the CanMarshal and CanUnmarshal flags for models where
 // the flags are enabled and recursively set the same values on all the models that are field types.
+
 func (ctx *APIContext) ApplyMarshalFlags() {
 	for _, m := range ctx.Models {
 		for _, f := range m.Fields {
@@ -195,7 +272,6 @@ func (ctx *APIContext) ApplyMarshalFlags() {
 				baseType = strings.Replace(baseType, "List<", "", -1)
 				baseType = strings.Replace(baseType, ">", "", -1)
 			}
-
 			if m.CanMarshal {
 				ctx.enableMarshal(ctx.modelLookup[baseType])
 			}
@@ -203,7 +279,6 @@ func (ctx *APIContext) ApplyMarshalFlags() {
 			if m.CanUnmarshal {
 				m, ok := ctx.modelLookup[baseType]
 				if !ok {
-					print(baseType)
 					log.Fatalf("could not find model of type %s for field %s", baseType, f.Name)
 				}
 				ctx.enableUnmarshal(m)
@@ -222,7 +297,6 @@ func (ctx *APIContext) enableMarshal(m *Model) {
 		}
 		mm, ok := ctx.modelLookup[f.Type]
 		if !ok {
-			print(f.Name)
 			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
 		}
 		ctx.enableMarshal(mm)
@@ -239,28 +313,27 @@ func (ctx *APIContext) enableUnmarshal(m *Model) {
 		}
 		mm, ok := ctx.modelLookup[f.Type]
 		if !ok {
-			print(f.Name)
 			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
 		}
 		ctx.enableUnmarshal(mm)
 	}
 }
 
-func CreateClientAPI(d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorResponse_File, error) {
+func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Generator) (*plugin_go.CodeGeneratorResponse_File, error) {
 	ctx := NewAPIContext()
 	pkg := d.GetPackage()
 
 	// Parse all Messages for generating typescript interfaces
+
 	for _, m := range d.GetMessageType() {
 		model := &Model{
 			Name: m.GetName(),
 		}
-
 		for _, f := range m.GetField() {
-			model.Fields = append(model.Fields, newField(f))
+			model.Fields = append(model.Fields, newField(f, m, d, generator))
 		}
-
 		ctx.AddModel(model)
+
 	}
 
 	// Parse all Services for generating typescript method interfaces and default client implementations
@@ -286,10 +359,8 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorRe
 
 			service.Methods = append(service.Methods, method)
 		}
-
 		ctx.Services = append(ctx.Services, service)
 	}
-
 	// Only include the custom 'ToJSON' and 'JSONTo' methods in generated code
 	// if the Model is part of an rpc method input arg or return type.
 	for _, m := range ctx.Models {
@@ -311,6 +382,7 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorRe
 		Primitive: true,
 	})
 
+	ctx.ApplyImports(d)
 	ctx.ApplyMarshalFlags()
 
 	funcMap := template.FuncMap{
@@ -329,14 +401,17 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorRe
 		return nil, err
 	}
 
-	cf := &plugin.CodeGeneratorResponse_File{}
-	cf.Name = proto.String(tsModuleFilename(d))
+	cf := &plugin_go.CodeGeneratorResponse_File{}
+	cf.Name = proto.String(dartModuleFilename(d))
 	cf.Content = proto.String(b.String())
 
 	return cf, nil
 }
 
-func newField(f *descriptor.FieldDescriptorProto) ModelField {
+func newField(f *descriptor.FieldDescriptorProto,
+	m *descriptor.DescriptorProto,
+	d *descriptor.FileDescriptorProto,
+	gen *generator.Generator) ModelField {
 	tsType, internalType, jsonType := protoToTSType(f)
 	jsonName := f.GetName()
 	name := camelCase(jsonName)
@@ -349,6 +424,20 @@ func newField(f *descriptor.FieldDescriptorProto) ModelField {
 		JSONType:     jsonType,
 	}
 
+	for _, nested := range m.GetNestedType() {
+		if !strings.HasSuffix(f.GetTypeName(), nested.GetName()) {
+			continue
+		}
+		keyField, valueField := nested.GetMapFields()
+		if keyField != nil && valueField != nil {
+			field.IsMap = true
+			mapKeyField := newField(keyField, nested, d, gen)
+			field.MapKeyField = &mapKeyField
+			mapValueField := newField(valueField, nested, d, gen)
+			field.MapValueField = &mapValueField
+			field.Type = fmt.Sprintf("Map<%s,%s>", mapKeyField.Type, mapValueField.Type)
+		}
+	}
 	field.IsMessage = f.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE
 	field.IsRepeated = isRepeated(f)
 

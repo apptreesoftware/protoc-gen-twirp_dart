@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package config.service;
+
+import "config/model/model.proto";
+
+
+// A Haberdasher makes hats for clients.
+service Haberdasher {
+    // MakeHat produces a hat of mysterious, randomly-selected color!
+    rpc MakeHat(model.Size) returns (model.Hat);
+
+    rpc BuyHat(model.Hat) returns (model.Hat);
+}

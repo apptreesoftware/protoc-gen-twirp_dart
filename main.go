@@ -2,13 +2,14 @@ package main
 
 import (
 	"github.com/apptreesoftware/protoc-gen-twirp_dart/generator"
+	"github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
 
+	gogogen "github.com/gogo/protobuf/protoc-gen-gogo/generator"
 	"github.com/golang/protobuf/proto"
-	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
 func main() {
@@ -16,13 +17,13 @@ func main() {
 	writeResponse(os.Stdout, generate(req))
 }
 
-func readRequest(r io.Reader) *plugin.CodeGeneratorRequest {
+func readRequest(r io.Reader) *plugin_go.CodeGeneratorRequest {
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
 		panic(err)
 	}
 
-	req := new(plugin.CodeGeneratorRequest)
+	req := new(plugin_go.CodeGeneratorRequest)
 	if err = proto.Unmarshal(data, req); err != nil {
 		panic(err)
 	}
@@ -34,16 +35,20 @@ func readRequest(r io.Reader) *plugin.CodeGeneratorRequest {
 	return req
 }
 
-func generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResponse {
-	resp := &plugin.CodeGeneratorResponse{}
+func generate(in *plugin_go.CodeGeneratorRequest) *plugin_go.CodeGeneratorResponse {
+	resp := &plugin_go.CodeGeneratorResponse{}
 
+	gen := gogogen.New()
+	gen.Request = in
+	gen.WrapTypes()
+	gen.SetPackageNames()
+	gen.BuildTypeNameMap()
 	for _, f := range in.GetProtoFile() {
 		// skip google/protobuf/timestamp, we don't do any special serialization for jsonpb.
 		if *f.Name == "google/protobuf/timestamp.proto" {
 			continue
 		}
-
-		cf, err := generator.CreateClientAPI(f)
+		cf, err := generator.CreateClientAPI(f, gen)
 		if err != nil {
 			resp.Error = proto.String(err.Error())
 			return resp
@@ -52,12 +57,12 @@ func generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResponse {
 		resp.File = append(resp.File, cf)
 	}
 
-	resp.File = append(resp.File, generator.RuntimeLibrary())
+	//resp.File = append(resp.File, generator.RuntimeLibrary())
 
 	return resp
 }
 
-func writeResponse(w io.Writer, resp *plugin.CodeGeneratorResponse) {
+func writeResponse(w io.Writer, resp *plugin_go.CodeGeneratorResponse) {
 	data, err := proto.Marshal(resp)
 	if err != nil {
 		panic(err)
@@ -70,7 +75,7 @@ func writeResponse(w io.Writer, resp *plugin.CodeGeneratorResponse) {
 
 type Params map[string]string
 
-func getParameters(in *plugin.CodeGeneratorRequest) Params {
+func getParameters(in *plugin_go.CodeGeneratorRequest) Params {
 	params := make(Params)
 
 	if in.Parameter == nil {

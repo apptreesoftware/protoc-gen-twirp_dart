@@ -1,8 +1,4 @@
-import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart';
-import 'package:requester/requester.dart';
-import 'twirp.dart';
 
 class Hat {
   Hat(
@@ -13,6 +9,8 @@ class Hat {
     this.rgbColor,
     this.availableSizes,
     this.roles,
+    this.dictionary,
+    this.dictionaryWithMessage,
   );
 
   int size;
@@ -22,8 +20,26 @@ class Hat {
   Color rgbColor;
   List<Size> availableSizes;
   List<int> roles;
+  Map<String, int> dictionary;
+  Map<String, Size> dictionaryWithMessage;
 
   factory Hat.fromJson(Map<String, dynamic> json) {
+    var dictionaryMap = new Map<String, int>();
+    (json['dictionary'] as Map<String, dynamic>)?.forEach((key, val) {
+      if (val is String) {
+        dictionaryMap[key] = int.parse(val);
+      } else if (val is num) {
+        dictionaryMap[key] = val.toInt();
+      }
+    });
+
+    var dictionaryWithMessageMap = new Map<String, Size>();
+    (json['dictionaryWithMessage'] as Map<String, dynamic>)
+        ?.forEach((key, val) {
+      dictionaryWithMessageMap[key] =
+          new Size.fromJson(val as Map<String, dynamic>);
+    });
+
     return new Hat(
       json['size'] as int,
       json['color'] as String,
@@ -36,6 +52,8 @@ class Hat {
               .toList()
           : <Size>[],
       json['roles'] != null ? (json['roles'] as List).cast<int>() : <int>[],
+      dictionaryMap,
+      dictionaryWithMessageMap,
     );
   }
 
@@ -48,6 +66,9 @@ class Hat {
     map['rgbColor'] = rgbColor.toJson();
     map['availableSizes'] = availableSizes?.map((l) => l.toJson())?.toList();
     map['roles'] = roles?.map((l) => l)?.toList();
+    map['dictionary'] = json.decode(json.encode(dictionary));
+    map['dictionaryWithMessage'] =
+        json.decode(json.encode(dictionaryWithMessage));
     return map;
   }
 
@@ -137,61 +158,5 @@ class Size {
   @override
   String toString() {
     return json.encode(toJson());
-  }
-}
-
-abstract class Haberdasher {
-  Future<Hat> makeHat(Size size);
-  Future<Hat> buyHat(Hat hat);
-}
-
-class DefaultHaberdasher implements Haberdasher {
-  final String hostname;
-  Requester _requester;
-  final _pathPrefix = "/twirp/twitch.twirp.example.Haberdasher/";
-
-  DefaultHaberdasher(this.hostname, {Requester requester}) {
-    if (requester == null) {
-      _requester = new Requester(new Client());
-    } else {
-      _requester = requester;
-    }
-  }
-
-  Future<Hat> makeHat(Size size) async {
-    var url = "${hostname}${_pathPrefix}MakeHat";
-    var uri = Uri.parse(url);
-    var request = new Request('POST', uri);
-    request.headers['Content-Type'] = 'application/json';
-    request.body = json.encode(size.toJson());
-    var response = await _requester.send(request);
-    if (response.statusCode != 200) {
-      throw twirpException(response);
-    }
-    var value = json.decode(response.body);
-    return Hat.fromJson(value);
-  }
-
-  Future<Hat> buyHat(Hat hat) async {
-    var url = "${hostname}${_pathPrefix}BuyHat";
-    var uri = Uri.parse(url);
-    var request = new Request('POST', uri);
-    request.headers['Content-Type'] = 'application/json';
-    request.body = json.encode(hat.toJson());
-    var response = await _requester.send(request);
-    if (response.statusCode != 200) {
-      throw twirpException(response);
-    }
-    var value = json.decode(response.body);
-    return Hat.fromJson(value);
-  }
-
-  TwirpException twirpException(Response response) {
-    try {
-      var value = json.decode(response.body);
-      return new TwirpJsonException.fromJson(value);
-    } catch (e) {
-      throw new TwirpException(response.body);
-    }
   }
 }

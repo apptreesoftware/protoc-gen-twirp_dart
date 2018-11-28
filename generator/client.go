@@ -148,13 +148,13 @@ class Default{{.Name}} implements {{.Name}} {
     {{end}}
 
 	Exception twirpException(Response response) {
-    try {
-      var value = json.decode(response.body);
-      return new Exception(value['msg']);
-    } catch (e) {
-		return new Exception(response.body);
-    }
-  }
+    	try {
+      		var value = json.decode(response.body);
+      		return new TwirpJsonException.fromJson(value);
+    	} catch (e) {
+      		return new TwirpException(response.body);
+    	}
+  	}
 }
 
 {{end}}
@@ -226,6 +226,7 @@ func (ctx *APIContext) ApplyImports(d *descriptor.FileDescriptorProto) {
 		deps = append(deps, Import{"dart:async"})
 		deps = append(deps, Import{"package:http/http.dart"})
 		deps = append(deps, Import{"package:requester/requester.dart"})
+		deps = append(deps, Import{"package:twirp_dart_core/twirp_dart_core.dart"})
 	}
 	deps = append(deps, Import{"dart:convert"})
 
@@ -383,7 +384,7 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Gen
 	})
 
 	ctx.ApplyImports(d)
-	ctx.ApplyMarshalFlags()
+	//ctx.ApplyMarshalFlags()
 
 	funcMap := template.FuncMap{
 		"stringify": stringify,
@@ -412,13 +413,13 @@ func newField(f *descriptor.FieldDescriptorProto,
 	m *descriptor.DescriptorProto,
 	d *descriptor.FileDescriptorProto,
 	gen *generator.Generator) ModelField {
-	tsType, internalType, jsonType := protoToTSType(f)
+	dartType, internalType, jsonType := protoToDartType(f)
 	jsonName := f.GetName()
 	name := camelCase(jsonName)
 
 	field := ModelField{
 		Name:         name,
-		Type:         tsType,
+		Type:         dartType,
 		InternalType: internalType,
 		JSONName:     jsonName,
 		JSONType:     jsonType,
@@ -446,7 +447,7 @@ func newField(f *descriptor.FieldDescriptorProto,
 
 // generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
 // will work when converting between TS interfaces and protobuf JSON.
-func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string, string) {
+func protoToDartType(f *descriptor.FieldDescriptorProto) (string, string, string) {
 	dartType := "String"
 	jsonType := "string"
 	internalType := "String"

@@ -23,7 +23,7 @@ packages:
     source: hosted
     version: "1.14.11"
   http:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: http
       url: "https://pub.dartlang.org"
@@ -51,7 +51,7 @@ packages:
     source: hosted
     version: "1.6.2"
   requester:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: requester
       url: "https://pub.dartlang.org"
@@ -71,6 +71,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.0.4"
+  twirp_dart_core:
+    dependency: "direct main"
+    description:
+      name: twirp_dart_core
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.0.0"
   typed_data:
     dependency: transitive
     description:

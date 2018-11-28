@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:http/http.dart';
 import 'package:requester/requester.dart';
+import 'package:twirp_dart_core/twirp_dart_core.dart';
 import 'dart:convert';
 import '../model/model.twirp.dart';
 
@@ -53,9 +54,9 @@ class DefaultHaberdasher implements Haberdasher {
   Exception twirpException(Response response) {
     try {
       var value = json.decode(response.body);
-      return new Exception(value['msg']);
+      return new TwirpJsonException.fromJson(value);
     } catch (e) {
-      return new Exception(response.body);
+      return new TwirpException(response.body);
     }
   }
 }

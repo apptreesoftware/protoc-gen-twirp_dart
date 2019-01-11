@@ -3,15 +3,16 @@ package generator
 import (
 	"bytes"
 	"fmt"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
-	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
-	"github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 	"log"
 	"os"
 	"path"
 	"strings"
 	"text/template"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
+	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
+	"github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 )
 
 const apiTemplate = `
@@ -326,16 +327,28 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Gen
 
 	// Parse all Messages for generating typescript interfaces
 
-	for _, m := range d.GetMessageType() {
-		model := &Model{
-			Name: m.GetName(),
+	var f func(ms []*descriptor.DescriptorProto)
+	f = func(ms []*descriptor.DescriptorProto) {
+		for _, m := range ms {
+			if len(m.GetField()) == 2 &&
+				m.GetField()[0].GetName() == "key" &&
+				m.GetField()[1].GetName() == "value" {
+				// NOTE: map<T, S> is skipped
+				continue
+			}
+			model := &Model{
+				Name: m.GetName(),
+			}
+			for _, f := range m.GetField() {
+				model.Fields = append(model.Fields, newField(f, m, d, generator))
+			}
+			ctx.AddModel(model)
+			if len(m.NestedType) != 0 {
+				f(m.NestedType)
+			}
 		}
-		for _, f := range m.GetField() {
-			model.Fields = append(model.Fields, newField(f, m, d, generator))
-		}
-		ctx.AddModel(model)
-
 	}
+	f(d.GetMessageType())
 
 	// Parse all Services for generating typescript method interfaces and default client implementations
 	for _, s := range d.GetService() {

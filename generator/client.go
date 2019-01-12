@@ -327,8 +327,8 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Gen
 
 	// Parse all Messages for generating typescript interfaces
 
-	var f func(ms []*descriptor.DescriptorProto)
-	f = func(ms []*descriptor.DescriptorProto) {
+	var addModel func(ms []*descriptor.DescriptorProto)
+	addModel = func(ms []*descriptor.DescriptorProto) {
 		for _, m := range ms {
 			if len(m.GetField()) == 2 &&
 				m.GetField()[0].GetName() == "key" &&
@@ -344,11 +344,11 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Gen
 			}
 			ctx.AddModel(model)
 			if len(m.NestedType) != 0 {
-				f(m.NestedType)
+				addModel(m.NestedType)
 			}
 		}
 	}
-	f(d.GetMessageType())
+	addModel(d.GetMessageType())
 
 	// Parse all Services for generating typescript method interfaces and default client implementations
 	for _, s := range d.GetService() {

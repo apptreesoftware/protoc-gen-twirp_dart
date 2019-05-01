@@ -75,7 +75,7 @@ class {{.Name}} {
 		{{else if and (.IsMessage) (eq .Type "DateTime")}}
 		{{.Type}}.tryParse(json['{{.JSONName}}']),
 		{{else if .IsMessage}}
-		new {{.Type}}.fromJson(json),
+		new {{.Type}}.fromJson(json['{{.JSONName}}']),
 		{{else}}
 		json['{{.JSONName}}'] as {{.Type}}, 
 		{{- end}}

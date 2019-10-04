@@ -33,6 +33,9 @@ class {{.Name}} {
     {{end}}
 	
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
+		if (json == null) {
+			return null;
+		}
 		{{- range .Fields -}}
 			{{if .IsMap}}
 			var {{.Name}}Map = new {{.Type}}();
@@ -95,7 +98,7 @@ class {{.Name}} {
 		{{- else if and (.IsMessage) (eq .Type "DateTime")}}
 		map['{{.JSONName}}'] = {{.Name}}.toIso8601String();
 		{{- else if .IsMessage}}
-		map['{{.JSONName}}'] = {{.Name}}.toJson();
+		map['{{.JSONName}}'] = {{.Name}} == null ? null : {{.Name}}.toJson();
 		{{- else}}
     	map['{{.JSONName}}'] = {{.Name}};
     	{{- end}}

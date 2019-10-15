@@ -3,15 +3,16 @@ package generator
 import (
 	"bytes"
 	"fmt"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
-	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
-	"github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 	"log"
 	"os"
 	"path"
 	"strings"
 	"text/template"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
+	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
+	plugin_go "github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 )
 
 const apiTemplate = `
@@ -23,10 +24,10 @@ import '{{.Path}}';
 {{- if not .Primitive}}
 class {{.Name}} {
 
-	{{.Name}}(
+	{{.Name}}({
 	{{range .Fields -}}
 		this.{{.Name}},
-	{{- end}});
+	{{- end}}});
 
     {{range .Fields -}}
     {{.Type}} {{.Name}};
@@ -65,6 +66,7 @@ class {{.Name}} {
 
 		return new {{.Name}}(
 		{{- range .Fields -}}
+		{{.Name}}:
 		{{if .IsMap}}
 		{{.Name}}Map,
 		{{else if and .IsRepeated .IsMessage}}

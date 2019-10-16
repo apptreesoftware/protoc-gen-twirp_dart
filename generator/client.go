@@ -24,10 +24,17 @@ import '{{.Path}}';
 {{- if not .Primitive}}
 class {{.Name}} {
 
-	{{.Name}}({
+	{{.Name}}(
+	{{- if .Fields -}}
+		{
+	{{- end}}
 	{{range .Fields -}}
 		this.{{.Name}},
-	{{- end}}});
+	{{- end}}
+	{{- if .Fields -}}
+		}
+	{{- end}}
+	);
 
     {{range .Fields -}}
     {{.Type}} {{.Name}};

@@ -154,7 +154,7 @@ class Default{{.Name}} implements {{.Name}} {
 		if (response.statusCode != 200) {
      		throw twirpException(response);
     	}
-    	var value = json.decode(response.body);
+    	var value = json.decode(utf8.decode(response.bodyBytes));
     	return {{.OutputType}}.fromJson(value);
 	}
     {{end}}

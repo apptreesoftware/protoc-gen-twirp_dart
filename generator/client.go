@@ -158,8 +158,7 @@ class Default{{.Name}} implements {{.Name}} {
 		if (response.statusCode != 200) {
      		throw twirpException(response);
     	}
-    	var value = json.decode(utf8.decode(response.bodyBytes));
-    	return {{.OutputType}}.fromJson(value);
+		return compute({{.Name}}Decode, response.bodyBytes);
 	}
     {{end}}
 
@@ -172,6 +171,13 @@ class Default{{.Name}} implements {{.Name}} {
     	}
   	}
 }
+
+{{range .Methods}}
+	{{.OutputType}} {{.Name}}Decode(Uint8List body) {
+		var value = json.decode(utf8.decode(body));
+		return {{.OutputType}}.fromJson(value);
+	}
+{{end}}
 
 {{end}}
 
@@ -243,6 +249,8 @@ func (ctx *APIContext) ApplyImports(d *descriptor.FileDescriptorProto) {
 		deps = append(deps, Import{"package:http/http.dart"})
 		deps = append(deps, Import{"package:requester/requester.dart"})
 		deps = append(deps, Import{"package:twirp_dart_core/twirp_dart_core.dart"})
+		deps = append(deps, Import{"package:flutter/foundation.dart"})
+		deps = append(deps, Import{"dart:typed_data"})
 	}
 	deps = append(deps, Import{"dart:convert"})
 

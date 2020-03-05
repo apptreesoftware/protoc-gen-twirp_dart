@@ -134,16 +134,26 @@ abstract class {{.Name}} {
     {{- end}}
 }
 
+Future<T> _noqueue<T>(FutureOr<T> Function() callback) {
+	return callback();
+}
+
 class Default{{.Name}} implements {{.Name}} {
 	final String hostname;
     Requester _requester;
 	final _pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
+	Future<T> Function<T>(FutureOr<T> Function() callback) _queue;
 
-    Default{{.Name}}(this.hostname, {Requester requester}) {
+    Default{{.Name}}(this.hostname, {Requester requester, queue}) {
 		if (requester == null) {
       		_requester = new Requester(new Client());
     	} else {
 			_requester = requester;
+		}
+		if (queue == null) {
+			_queue = _noqueue;
+		} else {
+			_queue = queue;
 		}
 	}
 
@@ -158,7 +168,7 @@ class Default{{.Name}} implements {{.Name}} {
 		if (response.statusCode != 200) {
      		throw twirpException(response);
     	}
-		return compute({{.Name}}Decode, response.bodyBytes);
+		return _queue(() => compute({{.Name}}Decode, response.bodyBytes));
 	}
     {{end}}
 

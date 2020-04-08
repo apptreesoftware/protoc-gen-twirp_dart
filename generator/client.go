@@ -3,15 +3,16 @@ package generator
 import (
 	"bytes"
 	"fmt"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
-	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
-	"github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 	"log"
 	"os"
 	"path"
 	"strings"
 	"text/template"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
+	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
+	plugin_go "github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 )
 
 const apiTemplate = `
@@ -414,8 +415,9 @@ func newField(f *descriptor.FieldDescriptorProto,
 	d *descriptor.FileDescriptorProto,
 	gen *generator.Generator) ModelField {
 	dartType, internalType, jsonType := protoToDartType(f)
-	jsonName := f.GetName()
-	name := camelCase(jsonName)
+	fieldName := f.GetName()
+	jsonName := camelCase(fieldName)
+	name := camelCase(fieldName)
 
 	field := ModelField{
 		Name:         name,

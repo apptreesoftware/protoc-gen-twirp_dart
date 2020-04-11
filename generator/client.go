@@ -36,9 +36,9 @@ class {{.Name}} {
 	{{- end}}
 	);
 
-    {{range .Fields -}}
-    {{.Type}} {{.Name}};
-    {{end}}
+	{{range .Fields -}}
+	{{.Type}} {{.Name}};
+	{{end}}
 	
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
 		if (json == null) {
@@ -82,10 +82,10 @@ class {{.Name}} {
 		{{.Name}}Map,
 		{{else if and .IsRepeated .IsMessage}}
 		json['{{.JSONName}}'] != null
-          ? (json['{{.JSONName}}'] as List)
-              .map((d) => new {{.InternalType}}.fromJson(d))
-              .toList()
-          : <{{.InternalType}}>[],
+			? (json['{{.JSONName}}'] as List)
+				.map((d) => new {{.InternalType}}.fromJson(d))
+				.toList()
+			: <{{.InternalType}}>[],
 		{{else if .IsRepeated }}
 		json['{{.JSONName}}'] != null ? (json['{{.JSONName}}'] as List).cast<{{.InternalType}}>() : <{{.InternalType}}>[],
 		{{else if and (.IsMessage) (eq .Type "DateTime")}}
@@ -101,7 +101,7 @@ class {{.Name}} {
 
 	Map<String,dynamic>toJson() {
 		var map = new Map<String, dynamic>();
-    	{{- range .Fields -}}
+		{{- range .Fields -}}
 		{{- if .IsMap }}
 		map['{{.JSONName}}'] = json.decode(json.encode({{.Name}}));
 		{{- else if and .IsRepeated .IsMessage}}
@@ -113,16 +113,16 @@ class {{.Name}} {
 		{{- else if .IsMessage}}
 		map['{{.JSONName}}'] = {{.Name}} == null ? null : {{.Name}}.toJson();
 		{{- else}}
-    	map['{{.JSONName}}'] = {{.Name}};
-    	{{- end}}
+		map['{{.JSONName}}'] = {{.Name}};
+		{{- end}}
 		{{- end}}
 		return map;
 	}
 
-  @override
-  String toString() {
-    return json.encode(toJson());
-  }
+	@override
+	String toString() {
+		return json.encode(toJson());
+	}
 }
 {{end -}}
 {{end -}}
@@ -131,23 +131,19 @@ class {{.Name}} {
 abstract class {{.Name}} {
 	{{- range .Methods}}
 	Future<{{.OutputType}}>{{.Name}}({{.InputType}} {{.InputArg}});
-    {{- end}}
-}
-
-Future<T> _noqueue<T>(FutureOr<T> Function() callback) {
-	return callback();
+	{{- end}}
 }
 
 class Default{{.Name}} implements {{.Name}} {
 	final String hostname;
-    Requester _requester;
+	Requester _requester;
 	final _pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
 	Future<T> Function<T>(FutureOr<T> Function() callback) _queue;
 
-    Default{{.Name}}(this.hostname, {Requester requester, queue}) {
+	Default{{.Name}}(this.hostname, {Requester requester, queue}) {
 		if (requester == null) {
-      		_requester = new Requester(new Client());
-    	} else {
+			_requester = new Requester(new Client());
+		} else {
 			_requester = requester;
 		}
 		if (queue == null) {
@@ -157,37 +153,41 @@ class Default{{.Name}} implements {{.Name}} {
 		}
 	}
 
-    {{range .Methods}}
+	Future<T> _noqueue<T>(FutureOr<T> Function() callback) {
+		return callback();
+	}
+
+	{{range .Methods}}
 	Future<{{.OutputType}}>{{.Name}}({{.InputType}} {{.InputArg}}) async {
 		var url = "${hostname}${_pathPrefix}{{.Path}}";
 		var uri = Uri.parse(url);
-    	var request = new Request('POST', uri);
+		var request = new Request('POST', uri);
 		request.headers['Content-Type'] = 'application/json';
-    	request.body = json.encode({{.InputArg}}.toJson());
-    	var response = await _requester.send(request);
+		request.body = json.encode({{.InputArg}}.toJson());
+		var response = await _requester.send(request);
 		if (response.statusCode != 200) {
-     		throw twirpException(response);
-    	}
+	 		throw twirpException(response);
+		}
 		return _queue(() => compute({{.Name}}Decode, response.bodyBytes));
 	}
-    {{end}}
+	{{end}}
 
 	Exception twirpException(Response response) {
-    	try {
-      		var value = json.decode(response.body);
-      		return new TwirpJsonException.fromJson(value);
-    	} catch (e) {
-      		return new TwirpException(response.body);
-    	}
-  	}
-}
+		try {
+			var value = json.decode(response.body);
+			return new TwirpJsonException.fromJson(value);
+		} catch (e) {
+			return new TwirpException(response.body);
+		}
+	}
 
-{{range .Methods}}
+	{{range .Methods}}
 	{{.OutputType}} {{.Name}}Decode(Uint8List body) {
 		var value = json.decode(utf8.decode(body));
 		return {{.OutputType}}.fromJson(value);
 	}
-{{end}}
+	{{end}}
+}
 
 {{end}}
 

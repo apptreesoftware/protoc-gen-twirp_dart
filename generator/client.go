@@ -120,10 +120,10 @@ abstract class {{.Name}} {
 
 class Default{{.Name}} implements {{.Name}} {
 	final String hostname;
-    Requester _requester;
+  late  Requester _requester;
 	final _pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
 
-    Default{{.Name}}(this.hostname, {Requester requester}) {
+    Default{{.Name}}(this.hostname, {Requester? requester}) {
 		if (requester == null) {
       		_requester = new Requester(new Client());
     	} else {

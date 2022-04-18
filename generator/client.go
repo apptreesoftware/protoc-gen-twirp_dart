@@ -37,10 +37,14 @@ class {{.Name}} {
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
 		{{- range .Fields -}}
 			{{if .IsMap}}
-			final {{.Name}}Map = {{.Type}}();
-			(json['{{.JSONName}}'] as Map<String, dynamic>)?.forEach((key, val) {
+			final {{.Name}}Map = {{ mapLiteral .Type }}{};
+			(json['{{.JSONName}}'] as Map<String, dynamic>).forEach((key, val) {
 				{{if .MapValueField.IsMessage}}
-				{{.Name}}Map[key] = {{.MapValueField.Type}}.fromJson(val as Map<String,dynamic>);
+					{{ if isNumber .MapKeyField }}
+					{{.Name}}Map[int.parse(key)] = {{.MapValueField.Type}}.fromJson(val as Map<String,dynamic>);
+					{{ else }}
+					{{.Name}}Map[key] = {{.MapValueField.Type}}.fromJson(val as Map<String,dynamic>);
+					{{ end }}
 				{{else}}
 				if (val is String) {
 					{{if eq .MapValueField.Type "double"}}
@@ -398,6 +402,12 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Gen
 	funcMap := template.FuncMap{
 		"stringify": stringify,
 		"parse":     parse,
+		"mapLiteral": func(s string) string {
+			return strings.TrimPrefix(s, "Map")
+		},
+		"isNumber": func(m *ModelField) bool {
+			return m.JSONType == "number"
+		},
 	}
 
 	t, err := template.New("client_api").Funcs(funcMap).Parse(apiTemplate)

@@ -3,15 +3,16 @@ package generator
 import (
 	"bytes"
 	"fmt"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
-	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
-	"github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 	"log"
 	"os"
 	"path"
 	"strings"
 	"text/template"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
+	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
+	plugin_go "github.com/gogo/protobuf/protoc-gen-gogo/plugin"
 )
 
 const apiTemplate = `
@@ -29,16 +30,17 @@ class {{.Name}} {
 	{{- end}});
 
     {{range .Fields -}}
+	{{ if eq .Name "ID" }}// ignore: non_constant_identifier_names{{ end }}
     {{.Type}} {{.Name}};
-    {{end}}
+    {{- end }}
 	
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
 		{{- range .Fields -}}
 			{{if .IsMap}}
-			var {{.Name}}Map = new {{.Type}}();
+			final {{.Name}}Map = {{.Type}}();
 			(json['{{.JSONName}}'] as Map<String, dynamic>)?.forEach((key, val) {
 				{{if .MapValueField.IsMessage}}
-				{{.Name}}Map[key] = new {{.MapValueField.Type}}.fromJson(val as Map<String,dynamic>);
+				{{.Name}}Map[key] = {{.MapValueField.Type}}.fromJson(val as Map<String,dynamic>);
 				{{else}}
 				if (val is String) {
 					{{if eq .MapValueField.Type "double"}}
@@ -60,38 +62,42 @@ class {{.Name}} {
 			{{end}}
 		{{end}}
 
-		return new {{.Name}}(
+		return {{.Name}}(
 		{{- range .Fields -}}
 		{{if .IsMap}}
 		{{.Name}}Map,
 		{{else if and .IsRepeated .IsMessage}}
 		json['{{.JSONName}}'] != null
           ? (json['{{.JSONName}}'] as List)
-              .map((d) => new {{.InternalType}}.fromJson(d))
+              .map((d) => {{.InternalType}}.fromJson(d))
               .toList()
           : <{{.InternalType}}>[],
 		{{else if .IsRepeated }}
 		json['{{.JSONName}}'] != null ? (json['{{.JSONName}}'] as List).cast<{{.InternalType}}>() : <{{.InternalType}}>[],
 		{{else if and (.IsMessage) (eq .Type "DateTime")}}
-		{{.Type}}.tryParse(json['{{.JSONName}}']),
+		{{.Type}}.parse(json['{{.JSONName}}']),
 		{{else if .IsMessage}}
-		new {{.Type}}.fromJson(json['{{.JSONName}}']),
+		{{.Type}}.fromJson(json['{{.JSONName}}']),
+		{{else if .IsInt64}}
+		int.parse(json['{{.JSONName}}'] as String), 
+		{{else if eq .Type "double"}}
+		json['{{.JSONName}}'] != null ? double.parse(json['{{.JSONName}}'].toString()) : 0,
 		{{else}}
-		json['{{.JSONName}}'] as {{.Type}}, 
+		json['{{.JSONName}}'] as {{.Type}},
 		{{- end}}
 		{{- end}}
 		);	
 	}
 
 	Map<String,dynamic>toJson() {
-		var map = new Map<String, dynamic>();
+		final map = <String, dynamic>{};
     	{{- range .Fields -}}
 		{{- if .IsMap }}
 		map['{{.JSONName}}'] = json.decode(json.encode({{.Name}}));
 		{{- else if and .IsRepeated .IsMessage}}
-		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l.toJson())?.toList();
+		map['{{.JSONName}}'] = {{.Name}}.map((l) => l.toJson()).toList();
 		{{- else if .IsRepeated }}
-		map['{{.JSONName}}'] = {{.Name}}?.map((l) => l)?.toList();
+		map['{{.JSONName}}'] = {{.Name}}.map((l) => l).toList();
 		{{- else if and (.IsMessage) (eq .Type "DateTime")}}
 		map['{{.JSONName}}'] = {{.Name}}.toIso8601String();
 		{{- else if .IsMessage}}
@@ -120,39 +126,38 @@ abstract class {{.Name}} {
 
 class Default{{.Name}} implements {{.Name}} {
 	final String hostname;
-    Requester _requester;
+    Requester _requester = Requester(Client());
 	final _pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
 
-    Default{{.Name}}(this.hostname, {Requester requester}) {
-		if (requester == null) {
-      		_requester = new Requester(new Client());
-    	} else {
+    Default{{.Name}}(this.hostname, {Requester? requester}) {
+		if (requester != null) {
 			_requester = requester;
 		}
 	}
 
     {{range .Methods}}
+	@override
 	Future<{{.OutputType}}>{{.Name}}({{.InputType}} {{.InputArg}}) async {
-		var url = "${hostname}${_pathPrefix}{{.Path}}";
-		var uri = Uri.parse(url);
-    	var request = new Request('POST', uri);
+		final url = "$hostname${_pathPrefix}{{.Path}}";
+		final uri = Uri.parse(url);
+    	final request = Request('POST', uri);
 		request.headers['Content-Type'] = 'application/json';
     	request.body = json.encode({{.InputArg}}.toJson());
-    	var response = await _requester.send(request);
+    	final response = await _requester.send(request);
 		if (response.statusCode != 200) {
      		throw twirpException(response);
     	}
-    	var value = json.decode(response.body);
+    	final value = json.decode(response.body);
     	return {{.OutputType}}.fromJson(value);
 	}
     {{end}}
 
 	Exception twirpException(Response response) {
     	try {
-      		var value = json.decode(response.body);
-      		return new TwirpJsonException.fromJson(value);
+      		final value = json.decode(response.body);
+      		return TwirpJsonException.fromJson(value);
     	} catch (e) {
-      		return new TwirpException(response.body);
+      		return TwirpException(response.body);
     	}
   	}
 }
@@ -175,6 +180,7 @@ type ModelField struct {
 	InternalType  string
 	JSONName      string
 	JSONType      string
+	IsInt64       bool
 	IsMessage     bool
 	IsRepeated    bool
 	IsMap         bool
@@ -223,10 +229,13 @@ func (ctx *APIContext) ApplyImports(d *descriptor.FileDescriptorProto) {
 	var deps []Import
 
 	if len(ctx.Services) > 0 {
-		deps = append(deps, Import{"dart:async"})
-		deps = append(deps, Import{"package:http/http.dart"})
-		deps = append(deps, Import{"package:requester/requester.dart"})
-		deps = append(deps, Import{"package:twirp_dart_core/twirp_dart_core.dart"})
+		deps = append(
+			deps,
+			Import{"dart:async"},
+			Import{"package:http/http.dart"},
+			Import{"./requester.dart"},
+			Import{"./twirp_dart_core.dart"},
+		)
 	}
 	deps = append(deps, Import{"dart:convert"})
 
@@ -423,6 +432,7 @@ func newField(f *descriptor.FieldDescriptorProto,
 		InternalType: internalType,
 		JSONName:     jsonName,
 		JSONType:     jsonType,
+		IsInt64:      f.GetType() == descriptor.FieldDescriptorProto_TYPE_INT64,
 	}
 
 	for _, nested := range m.GetNestedType() {
@@ -552,7 +562,7 @@ func parse(f ModelField, modelName string) string {
 		singularType := f.Type[0 : len(f.Type)-2] // strip array brackets from type
 
 		if f.Type == "Date" {
-			return fmt.Sprintf("%s.map((n) => new Date(n))", field)
+			return fmt.Sprintf("%s.map((n) => Date(n))", field)
 		}
 
 		if f.IsMessage {
@@ -561,7 +571,7 @@ func parse(f ModelField, modelName string) string {
 	}
 
 	if f.Type == "Date" {
-		return fmt.Sprintf("new Date(%s)", field)
+		return fmt.Sprintf("Date(%s)", field)
 	}
 
 	if f.IsMessage {

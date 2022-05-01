@@ -1,15 +1,8 @@
 package generator
 
-import (
-	"github.com/gogo/protobuf/proto"
-	plugin_go "github.com/gogo/protobuf/protoc-gen-gogo/plugin"
-)
-
 // CoreFile is the twirp_dart_core.dart file that gets written
 // next to the target file.
-var CoreFile = &plugin_go.CodeGeneratorResponse_File{
-	Name: proto.String("twirp_dart_core.dart"),
-	Content: proto.String(`class TwirpException implements Exception {
+var CoreFile = `class TwirpException implements Exception {
   final String message;
 
   TwirpException(this.message);
@@ -37,5 +30,4 @@ class TwirpJsonException extends TwirpException {
     return 'TwirpJsonException{code: $code, msg: $msg, meta: $meta}';
   }
 }
-`),
-}
+`

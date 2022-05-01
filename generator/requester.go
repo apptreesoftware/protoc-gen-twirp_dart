@@ -1,15 +1,8 @@
 package generator
 
-import (
-	"github.com/gogo/protobuf/proto"
-	plugin_go "github.com/gogo/protobuf/protoc-gen-gogo/plugin"
-)
-
 // RequesterFile is the twirp_dart_core.dart file that gets written
 // next to the target file.
-var RequesterFile = &plugin_go.CodeGeneratorResponse_File{
-	Name: proto.String("requester.dart"),
-	Content: proto.String(`import 'dart:async';
+var RequesterFile = `import 'dart:async';
 import 'package:http/http.dart';
 
 /// Sends [BaseRequest] and returns the [Response] after applying all middleware
@@ -54,5 +47,4 @@ class BaseMiddleware implements Middleware {
   @override
   void handle(Response response) {}
 }
-`),
-}
+`

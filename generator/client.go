@@ -3,16 +3,13 @@ package generator
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"strings"
 	"text/template"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
-	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
-	plugin_go "github.com/gogo/protobuf/protoc-gen-gogo/plugin"
+	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const apiTemplate = `
@@ -31,7 +28,7 @@ class {{.Name}} {
 
     {{range .Fields -}}
 	{{ if eq .Name "ID" }}// ignore: non_constant_identifier_names{{ end }}
-    {{.Type}} {{.Name}};
+    {{.Type}}{{ if .IsOptional }}?{{ end }} {{.Name}};
     {{- end }}
 	
 	factory {{.Name}}.fromJson(Map<String,dynamic> json) {
@@ -80,6 +77,8 @@ class {{.Name}} {
 		json['{{.JSONName}}'] != null ? (json['{{.JSONName}}'] as List).cast<{{.InternalType}}>() : <{{.InternalType}}>[],
 		{{else if and (.IsMessage) (eq .Type "DateTime")}}
 		{{.Type}}.parse(json['{{.JSONName}}']),
+		{{else if and .IsMessage .IsOptional}}
+		json['{{.JSONName}}'] == null ? null : {{.Type}}.fromJson(json['{{.JSONName}}']),
 		{{else if .IsMessage}}
 		{{.Type}}.fromJson(json['{{.JSONName}}']),
 		{{else if .IsInt64}}
@@ -90,7 +89,7 @@ class {{.Name}} {
 		json['{{.JSONName}}'] as {{.Type}},
 		{{- end}}
 		{{- end}}
-		);	
+		);
 	}
 
 	Map<String,dynamic>toJson() {
@@ -104,6 +103,8 @@ class {{.Name}} {
 		map['{{.JSONName}}'] = {{.Name}}.map((l) => l).toList();
 		{{- else if and (.IsMessage) (eq .Type "DateTime")}}
 		map['{{.JSONName}}'] = {{.Name}}.toIso8601String();
+		{{- else if and .IsMessage .IsOptional}}
+		map['{{.JSONName}}'] = {{.Name}}?.toJson();
 		{{- else if .IsMessage}}
 		map['{{.JSONName}}'] = {{.Name}}.toJson();
 		{{- else}}
@@ -171,11 +172,9 @@ class Default{{.Name}} implements {{.Name}} {
 `
 
 type Model struct {
-	Name         string
-	Primitive    bool
-	Fields       []ModelField
-	CanMarshal   bool
-	CanUnmarshal bool
+	Name      string
+	Primitive bool
+	Fields    []ModelField
 }
 
 type ModelField struct {
@@ -188,6 +187,7 @@ type ModelField struct {
 	IsMessage     bool
 	IsRepeated    bool
 	IsMap         bool
+	IsOptional    bool
 	MapKeyField   *ModelField
 	MapValueField *ModelField
 }
@@ -229,7 +229,7 @@ func (ctx *APIContext) AddModel(m *Model) {
 	ctx.modelLookup[m.Name] = m
 }
 
-func (ctx *APIContext) ApplyImports(d *descriptor.FileDescriptorProto) {
+func (ctx *APIContext) ApplyImports(f *protogen.File) {
 	var deps []Import
 
 	if len(ctx.Services) > 0 {
@@ -243,12 +243,12 @@ func (ctx *APIContext) ApplyImports(d *descriptor.FileDescriptorProto) {
 	}
 	deps = append(deps, Import{"dart:convert"})
 
-	for _, dep := range d.Dependency {
+	for _, dep := range f.Proto.Dependency {
 		if dep == "google/protobuf/timestamp.proto" {
 			continue
 		}
 		importPath := path.Dir(dep)
-		sourceDir := path.Dir(*d.Name)
+		sourceDir := path.Dir(f.Proto.GetName())
 		sourceComponents := strings.Split(sourceDir, fmt.Sprintf("%c", os.PathSeparator))
 		distanceFromRoot := len(sourceComponents)
 		for _, pathComponent := range sourceComponents {
@@ -270,134 +270,45 @@ func (ctx *APIContext) ApplyImports(d *descriptor.FileDescriptorProto) {
 	ctx.Imports = deps
 }
 
-// ApplyMarshalFlags will inspect the CanMarshal and CanUnmarshal flags for models where
-// the flags are enabled and recursively set the same values on all the models that are field types.
-
-func (ctx *APIContext) ApplyMarshalFlags() {
-	for _, m := range ctx.Models {
-		for _, f := range m.Fields {
-			// skip primitive types and WKT Timestamps
-			if !f.IsMessage || f.Type == "DateTime" {
-				continue
-			}
-
-			baseType := f.Type
-			if f.IsRepeated {
-				baseType = strings.Replace(baseType, "List<", "", -1)
-				baseType = strings.Replace(baseType, ">", "", -1)
-			}
-			if m.CanMarshal {
-				ctx.enableMarshal(ctx.modelLookup[baseType])
-			}
-
-			if m.CanUnmarshal {
-				m, ok := ctx.modelLookup[baseType]
-				if !ok {
-					log.Fatalf("could not find model of type %s for field %s", baseType, f.Name)
-				}
-				ctx.enableUnmarshal(m)
-			}
-		}
-	}
-}
-
-func (ctx *APIContext) enableMarshal(m *Model) {
-	m.CanMarshal = true
-
-	for _, f := range m.Fields {
-		// skip primitive types and WKT Timestamps
-		if !f.IsMessage || f.Type == "DateTime" {
-			continue
-		}
-		mm, ok := ctx.modelLookup[f.Type]
-		if !ok {
-			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
-		}
-		ctx.enableMarshal(mm)
-	}
-}
-
-func (ctx *APIContext) enableUnmarshal(m *Model) {
-	m.CanUnmarshal = true
-
-	for _, f := range m.Fields {
-		// skip primitive types and WKT Timestamps
-		if !f.IsMessage || f.Type == "DateTime" {
-			continue
-		}
-		mm, ok := ctx.modelLookup[f.Type]
-		if !ok {
-			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
-		}
-		ctx.enableUnmarshal(mm)
-	}
-}
-
-func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Generator) (*plugin_go.CodeGeneratorResponse_File, error) {
+func CreateClientAPI(p *protogen.Plugin, f *protogen.File) error {
 	ctx := NewAPIContext()
-	pkg := d.GetPackage()
-
-	// Parse all Messages for generating typescript interfaces
-
-	for _, m := range d.GetMessageType() {
+	for _, m := range f.Messages {
 		model := &Model{
-			Name: m.GetName(),
+			Name: string(m.Desc.Name()),
 		}
-		for _, f := range m.GetField() {
-			model.Fields = append(model.Fields, newField(f, m, d, generator))
+		for _, f := range m.Fields {
+			model.Fields = append(model.Fields, newField(f))
 		}
 		ctx.AddModel(model)
-
 	}
-
-	// Parse all Services for generating typescript method interfaces and default client implementations
-	for _, s := range d.GetService() {
+	for _, s := range f.Services {
 		service := &Service{
-			Name:    s.GetName(),
-			Package: pkg,
+			Name:    string(s.Desc.Name()),
+			Package: f.Proto.GetPackage(),
 		}
 
-		for _, m := range s.GetMethod() {
-			methodPath := m.GetName()
+		for _, m := range s.Methods {
+			methodPath := string(m.Desc.Name())
 			methodName := strings.ToLower(methodPath[0:1]) + methodPath[1:]
-			in := removePkg(m.GetInputType())
+			in := string(m.Input.Desc.Name())
 			arg := strings.ToLower(in[0:1]) + in[1:]
-
-			method := ServiceMethod{
+			service.Methods = append(service.Methods, ServiceMethod{
 				Name:       methodName,
 				Path:       methodPath,
 				InputArg:   arg,
 				InputType:  in,
-				OutputType: removePkg(m.GetOutputType()),
-			}
-
-			service.Methods = append(service.Methods, method)
+				OutputType: string(m.Output.Desc.Name()),
+			})
 		}
+
 		ctx.Services = append(ctx.Services, service)
-	}
-	// Only include the custom 'ToJSON' and 'JSONTo' methods in generated code
-	// if the Model is part of an rpc method input arg or return type.
-	for _, m := range ctx.Models {
-		for _, s := range ctx.Services {
-			for _, sm := range s.Methods {
-				if m.Name == sm.InputType {
-					m.CanMarshal = true
-				}
-
-				if m.Name == sm.OutputType {
-					m.CanUnmarshal = true
-				}
-			}
-		}
 	}
 
 	ctx.AddModel(&Model{
 		Name:      "Date",
 		Primitive: true,
 	})
-
-	ctx.ApplyImports(d)
-	//ctx.ApplyMarshalFlags()
+	ctx.ApplyImports(f)
 
 	funcMap := template.FuncMap{
 		"stringify": stringify,
@@ -412,116 +323,46 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto, generator *generator.Gen
 
 	t, err := template.New("client_api").Funcs(funcMap).Parse(apiTemplate)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	b := bytes.NewBufferString("")
 	err = t.Execute(b, ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	cf := &plugin_go.CodeGeneratorResponse_File{}
-	cf.Name = proto.String(dartModuleFilename(d))
-	cf.Content = proto.String(b.String())
+	ff := p.NewGeneratedFile(twirpFilename(f.Proto.GetName()), "")
+	_, err = ff.Write(b.Bytes())
 
-	return cf, nil
+	return err
 }
 
-func newField(f *descriptor.FieldDescriptorProto,
-	m *descriptor.DescriptorProto,
-	d *descriptor.FileDescriptorProto,
-	gen *generator.Generator) ModelField {
-	dartType, internalType, jsonType := protoToDartType(f)
-	jsonName := f.GetName()
+func newField(f *protogen.Field) ModelField {
+	jsonName := string(f.Desc.Name())
 	name := camelCase(jsonName)
-
+	dartType, internalType, jsonType := protoToDartType(f)
 	field := ModelField{
 		Name:         name,
 		Type:         dartType,
 		InternalType: internalType,
 		JSONName:     jsonName,
 		JSONType:     jsonType,
-		IsInt64:      f.GetType() == descriptor.FieldDescriptorProto_TYPE_INT64,
+		IsInt64:      f.Desc.Kind() == protoreflect.Int64Kind,
+		IsMap:        f.Desc.IsMap(),
+		IsRepeated:   f.Desc.IsList(),
+		IsOptional:   f.Desc.HasOptionalKeyword(),
 	}
-
-	for _, nested := range m.GetNestedType() {
-		if !strings.HasSuffix(f.GetTypeName(), nested.GetName()) {
-			continue
-		}
-		keyField, valueField := nested.GetMapFields()
-		if keyField != nil && valueField != nil {
-			field.IsMap = true
-			mapKeyField := newField(keyField, nested, d, gen)
-			field.MapKeyField = &mapKeyField
-			mapValueField := newField(valueField, nested, d, gen)
-			field.MapValueField = &mapValueField
-			field.Type = fmt.Sprintf("Map<%s,%s>", mapKeyField.Type, mapValueField.Type)
-		}
+	if field.IsMap {
+		mapKeyField := newField(f.Message.Fields[0])
+		field.MapKeyField = &mapKeyField
+		mapValueField := newField(f.Message.Fields[1])
+		field.MapValueField = &mapValueField
+		field.Type = fmt.Sprintf("Map<%s,%s>", mapKeyField.Type, mapValueField.Type)
+	} else { // not sure we require the else here.
+		field.IsMessage = f.Desc.Kind() == protoreflect.MessageKind
 	}
-	field.IsMessage = f.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE
-	field.IsRepeated = isRepeated(f)
-
 	return field
-}
-
-// generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
-// will work when converting between TS interfaces and protobuf JSON.
-func protoToDartType(f *descriptor.FieldDescriptorProto) (string, string, string) {
-	dartType := "String"
-	jsonType := "string"
-	internalType := "String"
-
-	switch f.GetType() {
-	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
-		dartType = "double"
-		jsonType = "number"
-		break
-	case descriptor.FieldDescriptorProto_TYPE_FIXED32,
-		descriptor.FieldDescriptorProto_TYPE_FIXED64,
-		descriptor.FieldDescriptorProto_TYPE_INT32,
-		descriptor.FieldDescriptorProto_TYPE_INT64:
-		dartType = "int"
-		jsonType = "number"
-	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		dartType = "String"
-		jsonType = "string"
-	case descriptor.FieldDescriptorProto_TYPE_BOOL:
-		dartType = "bool"
-		jsonType = "boolean"
-	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
-		name := f.GetTypeName()
-
-		// Google WKT Timestamp is a special case here:
-		//
-		// Currently the value will just be left as jsonpb RFC 3339 string.
-		// JSON.stringify already handles serializing Date to its RFC 3339 format.
-		//
-		if name == ".google.protobuf.Timestamp" {
-			dartType = "DateTime"
-			jsonType = "string"
-		} else {
-			dartType = removePkg(name)
-			jsonType = removePkg(name) + "JSON"
-		}
-	}
-	internalType = dartType
-
-	if isRepeated(f) {
-		dartType = "List<" + dartType + ">"
-		jsonType = jsonType + "[]"
-	}
-
-	return dartType, internalType, jsonType
-}
-
-func isRepeated(field *descriptor.FieldDescriptorProto) bool {
-	return field.Label != nil && *field.Label == descriptor.FieldDescriptorProto_LABEL_REPEATED
-}
-
-func removePkg(s string) string {
-	p := strings.Split(s, ".")
-	return p[len(p)-1]
 }
 
 func camelCase(s string) string {
@@ -536,6 +377,56 @@ func camelCase(s string) string {
 	}
 
 	return strings.Join(parts, "")
+}
+
+// generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
+// will work when converting between TS interfaces and protobuf JSON.
+func protoToDartType(f *protogen.Field) (string, string, string) {
+	dartType := "String"
+	jsonType := "string"
+	internalType := "String"
+
+	switch f.Desc.Kind() {
+	case protoreflect.DoubleKind:
+		dartType = "double"
+		jsonType = "number"
+		break
+	case protoreflect.Fixed32Kind,
+		protoreflect.Fixed64Kind,
+		protoreflect.Int32Kind,
+		protoreflect.Int64Kind:
+		dartType = "int"
+		jsonType = "number"
+	case protoreflect.StringKind:
+		dartType = "String"
+		jsonType = "string"
+	case protoreflect.BoolKind:
+		dartType = "bool"
+		jsonType = "boolean"
+	case protoreflect.MessageKind:
+		name := string(f.Message.Desc.Name())
+
+		// Google WKT Timestamp is a special case here:
+		//
+		// Currently the value will just be left as jsonpb RFC 3339 string.
+		// JSON.stringify already handles serializing Date to its RFC 3339 format.
+		//
+		if f.Message.Desc.FullName() == "google.protobuf.Timestamp" {
+			dartType = "DateTime"
+			jsonType = "string"
+		} else {
+			dartType = name
+			jsonType = name + "JSON"
+		}
+	}
+	internalType = dartType
+
+	if f.Desc.IsList() {
+		dartType = "List<" + dartType + ">"
+		jsonType = jsonType + "[]"
+	}
+
+	return dartType, internalType, jsonType
 }
 
 func stringify(f ModelField) string {

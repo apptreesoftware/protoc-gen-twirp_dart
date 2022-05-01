@@ -17,10 +17,8 @@ While not required for generating the client code, it is required to run the ser
     
 ### Dependencies
 
-This plugin requires 2 Dart pub dependencies. In your pubspec.yaml specify:
-  http: ^0.11.0
-  requester: ">=0.0.2 <2.0.0"
-
+This plugin requires 1 Dart pub dependencies. In your pubspec.yaml specify:
+  http: ^0.13.0
 
 ## Usage
 

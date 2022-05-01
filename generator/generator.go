@@ -1,13 +1,6 @@
 package generator
 
-import (
-	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
-	"path"
-)
-
-func dartModuleFilename(f *descriptor.FileDescriptorProto) string {
-	return twirpFilename(*f.Name)
-}
+import "path"
 
 func dartFilename(name string) string {
 	if ext := path.Ext(name); ext == ".proto" || ext == ".protodevel" {
